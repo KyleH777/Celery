@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import PitchStatus
+from app.schemas_ai import CompanyAnalysis
 
 
 class DomainInput(BaseModel):
@@ -58,13 +59,27 @@ class LeadPitchCreate(BaseModel):
     company_id: uuid.UUID
 
 
+class PitchQueuedResponse(BaseModel):
+    """Acknowledgement returned when an enrichment job is accepted."""
+
+    pitch_id: uuid.UUID
+    company_id: uuid.UUID
+    domain: str
+    status: PitchStatus
+
+
 class LeadPitchResponse(BaseModel):
-    """Serialized LeadPitch record, including generation status."""
+    """Serialized LeadPitch record, including generation status.
+
+    `analysis` and `generated_pitch` are populated only once `status`
+    is `completed`.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     company_id: uuid.UUID
     generated_pitch: str | None
+    analysis: CompanyAnalysis | None
     status: PitchStatus
     created_at: datetime

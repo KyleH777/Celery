@@ -72,8 +72,10 @@ def enrich_company_task(self, company_id: str) -> None:
             _mark_pitches(db, pending_pitches, PitchStatus.FAILED)
             return
 
+        analysis_data = outreach.analysis.model_dump()
         for pitch in pending_pitches:
             pitch.generated_pitch = outreach.personalized_pitch
+            pitch.analysis = analysis_data
             pitch.status = PitchStatus.COMPLETED
         db.commit()
 

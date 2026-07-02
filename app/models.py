@@ -4,8 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -23,7 +22,7 @@ class Company(Base):
 
     __tablename__ = "companies"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     domain: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     industry: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -43,11 +42,12 @@ class LeadPitch(Base):
 
     __tablename__ = "lead_pitches"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
     )
     generated_pitch: Mapped[str | None] = mapped_column(Text, nullable=True)
+    analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[PitchStatus] = mapped_column(
         Enum(PitchStatus, name="pitch_status", native_enum=False, length=20),
         default=PitchStatus.PENDING,

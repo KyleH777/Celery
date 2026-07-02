@@ -12,7 +12,7 @@ FastAPI · Pydantic v2 · PostgreSQL (SQLAlchemy 2.0) · Celery · Redis · Open
 .
 ├── app/
 │   ├── __init__.py
-│   ├── main.py           # FastAPI app entrypoint
+│   ├── main.py           # FastAPI entrypoint: routes, CORS, error handlers
 │   ├── config.py         # Pydantic settings (env vars)
 │   ├── database.py       # SQLAlchemy engine / session / Base
 │   ├── models.py         # ORM models: Company, LeadPitch
@@ -21,10 +21,7 @@ FastAPI · Pydantic v2 · PostgreSQL (SQLAlchemy 2.0) · Celery · Redis · Open
 │   ├── worker.py         # Background task: scrape + AI pitch pipeline
 │   ├── scraper.py        # httpx + BeautifulSoup scraping utility
 │   ├── ai_service.py     # OpenAI structured-output analysis + PAS pitch
-│   ├── schemas_ai.py     # Pydantic models for LLM structured outputs
-│   └── api/
-│       ├── __init__.py
-│       └── routes.py     # API endpoints
+│   └── schemas_ai.py     # Pydantic models for LLM structured outputs
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
@@ -53,7 +50,8 @@ Redis must be running locally (or reachable via `REDIS_URL`), and PostgreSQL mus
 
 ## API
 
-- `POST /api/v1/companies` — create a company record
-- `POST /api/v1/companies/{company_id}/pitches` — queue pitch generation
-- `GET /api/v1/pitches/{pitch_id}` — poll pitch status/result
-- `GET /health` — health check
+- `POST /api/v1/pitches/enrich` — submit a domain; queues scrape → analysis → pitch and returns the pitch ID (202)
+- `GET /api/v1/pitches/{pitch_id}` — poll status; returns analysis + personalized pitch when `completed`
+- `GET /health` — liveness probe
+
+Interactive Swagger docs at `/docs` once the server is running.

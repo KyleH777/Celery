@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Company, LeadPitch, PitchStatus
 from app.schemas import CompanyCreate, CompanyResponse, LeadPitchResponse
-from app.tasks import generate_lead_pitch
+from app.worker import enrich_company_task
 
 router = APIRouter()
 
@@ -62,7 +62,7 @@ def create_lead_pitch(company_id: uuid.UUID, db: Session = Depends(get_db)) -> L
             detail="Failed to create lead pitch record",
         ) from exc
 
-    generate_lead_pitch.delay(str(pitch.id))
+    enrich_company_task.delay(str(company.id))
     return pitch
 
 

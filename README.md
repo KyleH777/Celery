@@ -18,9 +18,10 @@ FastAPI · Pydantic v2 · PostgreSQL (SQLAlchemy 2.0) · Celery · Redis · Open
 │   ├── models.py         # ORM models: Company, LeadPitch
 │   ├── schemas.py        # Pydantic request/response schemas
 │   ├── celery_app.py     # Celery application instance
-│   ├── tasks.py          # Background tasks (pitch generation)
-│   ├── worker.py         # Background task: company website enrichment
+│   ├── worker.py         # Background task: scrape + AI pitch pipeline
 │   ├── scraper.py        # httpx + BeautifulSoup scraping utility
+│   ├── ai_service.py     # OpenAI structured-output analysis + PAS pitch
+│   ├── schemas_ai.py     # Pydantic models for LLM structured outputs
 │   └── api/
 │       ├── __init__.py
 │       └── routes.py     # API endpoints

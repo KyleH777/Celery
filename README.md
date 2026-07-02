@@ -10,6 +10,7 @@ FastAPI · Pydantic v2 · PostgreSQL (SQLAlchemy 2.0) · Celery · Redis · Open
 
 ```
 .
+├── app.py                # Streamlit frontend (ProspectGPT Dashboard)
 ├── app/
 │   ├── __init__.py
 │   ├── main.py           # FastAPI entrypoint: routes, CORS, error handlers
@@ -44,6 +45,9 @@ uvicorn app.main:app --reload
 
 # Celery worker (in a separate process)
 celery -A app.celery_app.celery_app worker --loglevel=info
+
+# Streamlit dashboard (in a separate process; set API_BASE_URL if the API is remote)
+streamlit run app.py
 ```
 
 Redis must be running locally (or reachable via `REDIS_URL`), and PostgreSQL must be reachable via `DATABASE_URL`.

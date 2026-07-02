@@ -72,6 +72,11 @@ def enrich_company_task(self, company_id: str) -> None:
             _mark_pitches(db, pending_pitches, PitchStatus.FAILED)
             return
 
+        if not company.industry:
+            company.industry = outreach.analysis.industry
+        if not company.company_size:
+            company.company_size = outreach.analysis.company_size
+
         analysis_data = outreach.analysis.model_dump()
         for pitch in pending_pitches:
             pitch.generated_pitch = outreach.personalized_pitch

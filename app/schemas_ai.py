@@ -10,6 +10,14 @@ class CompanyAnalysis(BaseModel):
         ...,
         description="The primary customer segment the company sells to.",
     )
+    industry: str = Field(
+        ...,
+        description="The industry vertical the company operates in, e.g. 'Fintech' or 'Logistics'.",
+    )
+    company_size: str = Field(
+        ...,
+        description="Estimated employee count bracket, e.g. '1-10', '11-50', '51-200', '200+'.",
+    )
     pain_points: list[str] = Field(
         ...,
         min_length=2,

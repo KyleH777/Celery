@@ -59,6 +59,17 @@ class LeadPitchCreate(BaseModel):
     company_id: uuid.UUID
 
 
+class CompanySummary(BaseModel):
+    """Company facts embedded in pitch responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    domain: str
+    company_name: str | None
+    industry: str | None
+    company_size: str | None
+
+
 class PitchQueuedResponse(BaseModel):
     """Acknowledgement returned when an enrichment job is accepted."""
 
@@ -79,6 +90,7 @@ class LeadPitchResponse(BaseModel):
 
     id: uuid.UUID
     company_id: uuid.UUID
+    company: CompanySummary
     generated_pitch: str | None
     analysis: CompanyAnalysis | None
     status: PitchStatus

@@ -19,6 +19,8 @@ FastAPI · Pydantic v2 · PostgreSQL (SQLAlchemy 2.0) · Celery · Redis · Open
 │   ├── schemas.py        # Pydantic request/response schemas
 │   ├── celery_app.py     # Celery application instance
 │   ├── tasks.py          # Background tasks (pitch generation)
+│   ├── worker.py         # Background task: company website enrichment
+│   ├── scraper.py        # httpx + BeautifulSoup scraping utility
 │   └── api/
 │       ├── __init__.py
 │       └── routes.py     # API endpoints

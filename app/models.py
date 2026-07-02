@@ -4,7 +4,18 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text, Uuid, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -17,13 +28,39 @@ class PitchStatus(str, enum.Enum):
     FAILED = "failed"
 
 
-class Company(Base):
-    """A prospective B2B lead's company, along with enrichment data."""
+class User(Base):
+    """An authenticated tenant of the platform. All lead data is scoped to a user."""
 
-    __tablename__ = "companies"
+    __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    domain: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    companies: Mapped[list["Company"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class Company(Base):
+    """A prospective B2B lead's company, along with enrichment data.
+
+    `domain` is unique per tenant, not globally: two users researching the
+    same company must never share (or leak) each other's records.
+    """
+
+    __tablename__ = "companies"
+    __table_args__ = (UniqueConstraint("user_id", "domain", name="uq_companies_user_domain"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    domain: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     industry: Mapped[str | None] = mapped_column(String(255), nullable=True)
     company_size: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -32,6 +69,7 @@ class Company(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    user: Mapped["User"] = relationship(back_populates="companies")
     lead_pitches: Mapped[list["LeadPitch"]] = relationship(
         back_populates="company", cascade="all, delete-orphan"
     )
@@ -45,6 +83,9 @@ class LeadPitch(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     generated_pitch: Mapped[str | None] = mapped_column(Text, nullable=True)
     analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)

@@ -104,6 +104,7 @@ cd Celery
 
 # 2. Configure secrets (compose reads .env automatically)
 echo "OPENAI_API_KEY=sk-your-key-here" > .env
+echo "JWT_SECRET_KEY=$(openssl rand -hex 32)" >> .env
 
 # 3. Build and launch the entire 5-container ecosystem
 docker compose up --build
@@ -167,8 +168,10 @@ Requires local PostgreSQL and Redis reachable via the URLs in `.env`.
 │   ├── main.py               # FastAPI entrypoint: routes, CORS, error handlers
 │   ├── config.py             # Pydantic settings (env vars)
 │   ├── database.py           # SQLAlchemy engine / session / Base
-│   ├── models.py             # ORM models: Company, LeadPitch (+ status enum)
+│   ├── models.py             # ORM models: User, Company, LeadPitch
 │   ├── schemas.py            # API request/response schemas
+│   ├── auth.py               # bcrypt hashing, JWT issuance, current-user dependency
+│   ├── middleware.py         # Redis-backed per-user rate limiting (slowapi)
 │   ├── celery_app.py         # Celery application instance
 │   ├── worker.py             # Pipeline task: scrape → analyze → pitch
 │   ├── scraper.py            # httpx + BeautifulSoup scraping utility
@@ -184,10 +187,19 @@ Requires local PostgreSQL and Redis reachable via the URLs in `.env`.
 
 ## 🔌 API Reference
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/v1/pitches/enrich` | Submit a domain; returns `202` with a pollable `pitch_id`. Dedupes in-flight jobs per domain. |
-| `GET` | `/api/v1/pitches/{pitch_id}` | Job status; on `completed`, returns the structured analysis + personalized pitch. |
-| `GET` | `/health` | Liveness probe. |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/register` | — | Create an account (bcrypt-hashed password). |
+| `POST` | `/api/v1/auth/token` | — | OAuth2 password flow; returns a JWT Bearer token. |
+| `POST` | `/api/v1/pitches/enrich` | 🔒 JWT | Submit a domain; returns `202` with a pollable `pitch_id`. **Rate-limited to 5/min per user** (Redis-backed). Dedupes in-flight jobs per domain. |
+| `GET` | `/api/v1/pitches/{pitch_id}` | 🔒 JWT | Job status; on `completed`, returns the structured analysis + personalized pitch. |
+| `GET` | `/health` | — | Liveness probe. |
 
-Uniform JSON error envelopes throughout: `404` for unknown pitches, `422` for invalid domains, `503` when the database is unreachable, `500` for unexpected failures — no stack traces cross the API boundary.
+Uniform JSON error envelopes throughout: `401` for missing/invalid tokens, `404` for unknown pitches, `422` for invalid domains, `429` when rate-limited (with `Retry-After`), `503` when the database is unreachable, `500` for unexpected failures — no stack traces or internal details cross the API boundary.
+
+## 🔐 Security Model
+
+- **Authentication** — OAuth2 password flow issuing short-lived HS256 JWTs (PyJWT); passwords bcrypt-hashed via Passlib with per-hash salts. Login timing is equalized against user enumeration, and all credential failures return one generic 401.
+- **Multi-tenant isolation** — every `Company` and `LeadPitch` row carries a `user_id` foreign key; all queries filter by the authenticated user, and cross-tenant IDs return the same 404 as nonexistent ones. Domains are unique *per tenant*, so two customers researching the same company never share records.
+- **Rate limiting** — `slowapi` backed by the existing Redis container: atomic `INCR` + window `EXPIRE` per user key, enforced globally across all API replicas, with an in-memory fallback if Redis blips. The enrich endpoint (which fans out to scraping + LLM spend) is capped at 5 requests/minute per user.
+- **Fail-fast secrets** — the app refuses to boot without `JWT_SECRET_KEY` (generate with `openssl rand -hex 32`).

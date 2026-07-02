@@ -3,10 +3,39 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models import PitchStatus
 from app.schemas_ai import CompanyAnalysis
+
+
+class UserCreate(BaseModel):
+    """Registration payload."""
+
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class UserResponse(BaseModel):
+    """Public user representation (never includes password material)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: EmailStr
+    created_at: datetime
+
+
+class Token(BaseModel):
+    """OAuth2 bearer token response."""
+
+    access_token: str
+    token_type: str = "bearer"
 
 
 class DomainInput(BaseModel):

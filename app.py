@@ -19,11 +19,86 @@ st.set_page_config(
 )
 
 
+def auth_headers() -> dict[str, str]:
+    token = st.session_state.get("access_token")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def do_login(email: str, password: str) -> bool:
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/api/v1/auth/token",
+            data={"username": email, "password": password},
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.exceptions.RequestException:
+        st.error("🔌 Could not reach the backend server.")
+        return False
+    if response.status_code == 200:
+        st.session_state["access_token"] = response.json()["access_token"]
+        st.session_state["user_email"] = email
+        return True
+    if response.status_code == 401:
+        st.error("Incorrect email or password.")
+    else:
+        st.error(f"Login failed (HTTP {response.status_code}).")
+    return False
+
+
+def do_register(email: str, password: str) -> bool:
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/api/v1/auth/register",
+            json={"email": email, "password": password},
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.exceptions.RequestException:
+        st.error("🔌 Could not reach the backend server.")
+        return False
+    if response.status_code == 201:
+        st.success("Account created! Logging you in...")
+        return do_login(email, password)
+    if response.status_code == 409:
+        st.error("An account with this email already exists.")
+    elif response.status_code == 422:
+        st.error("Please use a valid email and a password of at least 8 characters.")
+    else:
+        st.error(f"Registration failed (HTTP {response.status_code}).")
+    return False
+
+
+def render_auth_forms() -> None:
+    login_tab, register_tab = st.tabs(["🔑 Log in", "✨ Sign up"])
+    with login_tab:
+        with st.form("login_form"):
+            email = st.text_input("Email", key="login_email")
+            password = st.text_input("Password", type="password", key="login_password")
+            if st.form_submit_button("Log in", type="primary", use_container_width=True):
+                if do_login(email.strip(), password):
+                    st.rerun()
+    with register_tab:
+        with st.form("register_form"):
+            email = st.text_input("Email", key="register_email")
+            password = st.text_input(
+                "Password (min 8 characters)", type="password", key="register_password"
+            )
+            if st.form_submit_button("Create account", use_container_width=True):
+                if do_register(email.strip(), password):
+                    st.rerun()
+
+
 def render_sidebar() -> None:
     with st.sidebar:
         st.markdown("# 🎯 ProspectGPT")
         st.markdown("### *B2B Lead Enrichment Engine*")
         st.markdown("---")
+        if st.session_state.get("access_token"):
+            st.markdown(f"👤 Signed in as **{st.session_state.get('user_email', 'user')}**")
+            if st.button("Log out", use_container_width=True):
+                st.session_state.pop("access_token", None)
+                st.session_state.pop("user_email", None)
+                st.rerun()
+            st.markdown("---")
         st.markdown(
             """
             **ProspectGPT** turns a bare company domain into a
@@ -46,6 +121,7 @@ def submit_domain(domain: str) -> dict | None:
         response = requests.post(
             f"{API_BASE_URL}/api/v1/pitches/enrich",
             json={"domain": domain},
+            headers=auth_headers(),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
     except requests.exceptions.ConnectionError:
@@ -57,6 +133,13 @@ def submit_domain(domain: str) -> dict | None:
 
     if response.status_code == 202:
         return response.json()
+    if response.status_code == 401:
+        st.session_state.pop("access_token", None)
+        st.error("🔒 Your session has expired. Please log in again.")
+        return None
+    if response.status_code == 429:
+        st.error("🐢 Rate limit reached (5 enrichments per minute). Give it a moment and try again.")
+        return None
     if response.status_code == 422:
         st.error("⚠️ That doesn't look like a valid domain. Try something like `example.com`.")
         return None
@@ -71,6 +154,7 @@ def fetch_pitch(pitch_id: str) -> dict | None:
     try:
         response = requests.get(
             f"{API_BASE_URL}/api/v1/pitches/{pitch_id}",
+            headers=auth_headers(),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
     except requests.exceptions.ConnectionError:
@@ -82,6 +166,10 @@ def fetch_pitch(pitch_id: str) -> dict | None:
 
     if response.status_code == 200:
         return response.json()
+    if response.status_code == 401:
+        st.session_state.pop("access_token", None)
+        st.error("🔒 Your session has expired. Please log in again.")
+        return None
     if response.status_code == 404:
         st.error("⚠️ This pitch no longer exists on the server.")
         return None
@@ -163,6 +251,11 @@ def main() -> None:
         "powered by live website analysis and AI copywriting."
     )
     st.markdown("---")
+
+    if not st.session_state.get("access_token"):
+        st.info("🔐 Log in or create an account to start analyzing companies.")
+        render_auth_forms()
+        return
 
     st.subheader("🔍 Analyze a Company")
     col_input, col_button = st.columns([4, 1], vertical_alignment="bottom")

@@ -1,5 +1,11 @@
 # 🚀 ProspectGPT: Distributed B2B Lead Enrichment & AI Outreach Engine
 
+[![CI](https://github.com/KyleH777/Celery/actions/workflows/ci.yml/badge.svg)](https://github.com/KyleH777/Celery/actions/workflows/ci.yml)
+![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-Pydantic%20v2-009688.svg)
+![Tests](https://img.shields.io/badge/tests-71%20passing-brightgreen.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+
 **Turn a bare company domain into a research-backed, personalized cold outreach pitch — in under a minute, at queue-scale.**
 
 Sales teams burn hours manually researching prospects: skimming websites, guessing pain points, and drafting outreach that still reads like spam. ProspectGPT automates the entire pipeline. Submit a domain, and a distributed background system scrapes the company's website, extracts structured business intelligence (value proposition, target audience, industry, size, pain points) with an LLM, and drafts a Problem-Agitate-Solve outreach message that cites a *specific, verifiable detail* from the prospect's own site — the difference between a reply and a delete.
@@ -159,6 +165,29 @@ Requires local PostgreSQL and Redis reachable via the URLs in `.env`.
 
 ---
 
+## 🧪 Testing & Quality
+
+A 71-test pytest suite runs on every push via GitHub Actions, alongside ruff linting:
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -v          # full suite (in-memory SQLite; no external services needed)
+ruff check .       # lint
+```
+
+| Suite | Covers |
+|---|---|
+| `test_auth.py` | Registration, login, forged/expired/garbage token rejection, bcrypt salting, enumeration-safe errors |
+| `test_pitches.py` | Job queueing, domain normalization, in-flight dedupe, cross-tenant 404s, per-user rate-limit buckets |
+| `test_billing.py` | Checkout (customer reuse), webhook signature rejection, event idempotency, credit provisioning/exhaustion/refund, past-due restriction |
+| `test_ai_service.py` | Two-step chain wiring, retryable-vs-permanent error taxonomy, context-overflow shrinking, input capping |
+| `test_worker.py` | Pipeline state machine, credit refund on failure, email dispatch, broker-failure isolation |
+| `test_scraper.py` | Boilerplate stripping, 4xx fail-fast vs timeout retries, dead/empty site handling |
+
+External integrations (OpenAI, Stripe, Resend, Redis) are mocked at the SDK
+boundary, so the suite is deterministic, fast (~20s), and runs anywhere —
+including CI — with zero credentials.
+
 ## 📁 Project Structure
 
 ```
@@ -180,11 +209,14 @@ Requires local PostgreSQL and Redis reachable via the URLs in `.env`.
 │   ├── scraper.py            # httpx + BeautifulSoup scraping utility
 │   ├── ai_service.py         # Two-step OpenAI structured-output chain
 │   └── schemas_ai.py         # Strict Pydantic models for LLM outputs
+├── tests/                    # 71-test pytest suite (auth, billing, pipeline, AI, scraper)
+├── .github/workflows/ci.yml  # Lint + test on every push
 ├── Dockerfile.backend        # Multi-stage python:3.11-slim (API + worker)
 ├── Dockerfile.frontend       # Lean Streamlit image
 ├── docker-compose.yml        # db · redis · backend · celery_worker · frontend
+├── pyproject.toml            # pytest + ruff configuration
 ├── requirements.txt
-├── requirements-frontend.txt
+├── requirements-frontend.txt / requirements-dev.txt
 └── .env.example
 ```
 

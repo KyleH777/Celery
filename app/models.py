@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -28,6 +29,14 @@ class PitchStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class SubscriptionStatus(str, enum.Enum):
+    INACTIVE = "inactive"
+    TRIALING = "trialing"
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    CANCELED = "canceled"
+
+
 class User(Base):
     """An authenticated tenant of the platform. All lead data is scoped to a user."""
 
@@ -37,12 +46,38 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
+    subscription_status: Mapped[SubscriptionStatus] = mapped_column(
+        Enum(SubscriptionStatus, name="subscription_status", native_enum=False, length=20),
+        default=SubscriptionStatus.INACTIVE,
+        nullable=False,
+    )
+    lead_credits_remaining: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     companies: Mapped[list["Company"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class ProcessedStripeEvent(Base):
+    """Ledger of handled Stripe webhook event IDs, enforcing idempotency.
+
+    The event insert commits atomically with the state changes it caused, so
+    a redelivered event either finds its ID here (skip) or hits the primary
+    key at commit time (rollback) — double-processing is impossible.
+    """
+
+    __tablename__ = "processed_stripe_events"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

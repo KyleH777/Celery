@@ -38,6 +38,21 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class CheckoutSessionResponse(BaseModel):
+    """Hosted Stripe Checkout URL to redirect the user to."""
+
+    checkout_url: str
+
+
+class BillingStatusResponse(BaseModel):
+    """The caller's current subscription state and remaining quota."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    subscription_status: str
+    lead_credits_remaining: int
+
+
 class DomainInput(BaseModel):
     """A raw domain submitted by a client, normalized for downstream lookups."""
 

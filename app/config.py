@@ -33,6 +33,21 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # Stripe billing. Empty values leave billing endpoints disabled (503)
+    # so the core product still boots in environments without Stripe keys.
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_ID: str = ""
+    CHECKOUT_SUCCESS_URL: str = "http://localhost:8501?checkout=success"
+    CHECKOUT_CANCEL_URL: str = "http://localhost:8501?checkout=cancelled"
+    MONTHLY_LEAD_CREDITS: int = 100
+
+    # Transactional email via Resend. An empty key disables sending (logged
+    # no-op) so environments without email credentials still run the pipeline.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "ProspectGPT <notifications@yourdomain.com>"
+    DASHBOARD_URL: str = "http://localhost:8501"
+
     # Celery defaults to REDIS_URL unless explicitly overridden.
     CELERY_BROKER_URL: str | None = None
     CELERY_RESULT_BACKEND: str | None = None

@@ -43,6 +43,13 @@ services:
       REDIS_URL: redis://redis:6379/0
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-insecure-secret-change-me}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_ID: ${STRIPE_PRICE_ID:-}
+      MONTHLY_LEAD_CREDITS: ${MONTHLY_LEAD_CREDITS:-100}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-ProspectGPT <notifications@yourdomain.com>}
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:8501}
     depends_on:
       db:
         condition: service_healthy
@@ -64,6 +71,13 @@ services:
       REDIS_URL: redis://redis:6379/0
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-insecure-secret-change-me}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_ID: ${STRIPE_PRICE_ID:-}
+      MONTHLY_LEAD_CREDITS: ${MONTHLY_LEAD_CREDITS:-100}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-ProspectGPT <notifications@yourdomain.com>}
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:8501}
     depends_on:
       db:
         condition: service_healthy

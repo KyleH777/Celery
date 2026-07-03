@@ -11,12 +11,15 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app import billing_service
 from app.auth import authenticate_user, create_access_token, get_current_user, hash_password
 from app.config import settings
 from app.database import Base, engine, get_db
 from app.middleware import ENRICH_RATE_LIMIT, limiter, rate_limit_handler
 from app.models import Company, LeadPitch, PitchStatus, User
 from app.schemas import (
+    BillingStatusResponse,
+    CheckoutSessionResponse,
     DomainInput,
     LeadPitchResponse,
     PitchQueuedResponse,
@@ -24,6 +27,7 @@ from app.schemas import (
     UserCreate,
     UserResponse,
 )
+from app.webhooks import router as billing_webhook_router
 from app.worker import enrich_company_task
 
 logger = logging.getLogger(__name__)
@@ -51,6 +55,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(billing_webhook_router)
 
 
 @app.exception_handler(OperationalError)
@@ -130,6 +136,39 @@ def login(
 
 
 @app.post(
+    "/api/v1/billing/checkout",
+    response_model=CheckoutSessionResponse,
+    tags=["billing"],
+    summary="Start a subscription via Stripe Checkout",
+)
+def create_checkout(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> CheckoutSessionResponse:
+    """Create a Stripe Checkout Session for the configured subscription plan
+    and return its hosted URL. Redirect the user there to complete payment;
+    webhooks activate the account and provision credits automatically.
+    """
+    url = billing_service.create_checkout_session(db, current_user)
+    return CheckoutSessionResponse(checkout_url=url)
+
+
+@app.get(
+    "/api/v1/billing/me",
+    response_model=BillingStatusResponse,
+    tags=["billing"],
+    summary="Your subscription status and remaining lead credits",
+)
+def billing_status(current_user: User = Depends(get_current_user)) -> BillingStatusResponse:
+    """Return the caller's subscription state and how many enrichment
+    credits remain in the current billing period.
+    """
+    return BillingStatusResponse(
+        subscription_status=current_user.subscription_status.value,
+        lead_credits_remaining=current_user.lead_credits_remaining,
+    )
+
+
+@app.post(
     "/api/v1/pitches/enrich",
     response_model=PitchQueuedResponse,
     status_code=status.HTTP_202_ACCEPTED,
@@ -152,8 +191,12 @@ def enrich_domain(
     separate record.
 
     Returns **202 Accepted** with the pitch ID to poll via
-    `GET /api/v1/pitches/{pitch_id}`.
+    `GET /api/v1/pitches/{pitch_id}`. Requires an active or trialing
+    subscription with remaining lead credits (**402** otherwise); one credit
+    is consumed per queued enrichment and refunded if the job terminally fails.
     """
+    billing_service.assert_subscription_entitled(current_user)
+
     company = (
         db.query(Company)
         .filter(Company.user_id == current_user.id, Company.domain == payload.domain)
@@ -197,6 +240,14 @@ def enrich_domain(
                 status=in_flight.status,
             )
 
+    if not billing_service.try_consume_lead_credit(db, current_user.id):
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Monthly lead credits exhausted. Credits reset on your next paid invoice.",
+        )
+
+    # The credit reservation and the pitch it pays for commit atomically.
     pitch = LeadPitch(company_id=company.id, user_id=current_user.id, status=PitchStatus.PENDING)
     db.add(pitch)
     db.commit()

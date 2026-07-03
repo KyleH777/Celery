@@ -172,6 +172,9 @@ Requires local PostgreSQL and Redis reachable via the URLs in `.env`.
 │   ├── schemas.py            # API request/response schemas
 │   ├── auth.py               # bcrypt hashing, JWT issuance, current-user dependency
 │   ├── middleware.py         # Redis-backed per-user rate limiting (slowapi)
+│   ├── billing_service.py    # Stripe checkout, entitlements, credit accounting
+│   ├── webhooks.py           # Idempotent, signature-verified Stripe webhooks
+│   ├── notification_service.py  # Resend transactional email (batch completion)
 │   ├── celery_app.py         # Celery application instance
 │   ├── worker.py             # Pipeline task: scrape → analyze → pitch
 │   ├── scraper.py            # httpx + BeautifulSoup scraping utility
@@ -203,3 +206,9 @@ Uniform JSON error envelopes throughout: `401` for missing/invalid tokens, `404`
 - **Multi-tenant isolation** — every `Company` and `LeadPitch` row carries a `user_id` foreign key; all queries filter by the authenticated user, and cross-tenant IDs return the same 404 as nonexistent ones. Domains are unique *per tenant*, so two customers researching the same company never share records.
 - **Rate limiting** — `slowapi` backed by the existing Redis container: atomic `INCR` + window `EXPIRE` per user key, enforced globally across all API replicas, with an in-memory fallback if Redis blips. The enrich endpoint (which fans out to scraping + LLM spend) is capped at 5 requests/minute per user.
 - **Fail-fast secrets** — the app refuses to boot without `JWT_SECRET_KEY` (generate with `openssl rand -hex 32`).
+
+## 💳 Billing & Notifications
+
+- **Stripe subscriptions** — `POST /api/v1/billing/checkout` returns a hosted Checkout URL; signature-verified webhooks (`/api/v1/billing/webhook`) activate accounts, provision monthly lead credits on paid invoices, and mark accounts `past_due` on failed payments. Webhook processing is idempotent: each event ID commits atomically with the changes it caused, so Stripe redeliveries can never double-apply. Test locally with `stripe listen --forward-to localhost:8000/api/v1/billing/webhook`.
+- **Credit metering** — one credit is reserved per queued enrichment via an atomic conditional UPDATE (race-safe under concurrency) and refunded automatically if the job terminally fails. `GET /api/v1/billing/me` reports status and remaining quota.
+- **Email notifications (Resend)** — when a batch completes, a decoupled Celery task emails the owner a styled summary with a dashboard link (plus RFC 8058 List-Unsubscribe headers and preference-center placeholders). Delivery is strictly best-effort: an email failure is logged and can never roll back or crash the enrichment it reports on. Leave `RESEND_API_KEY` empty to disable.

@@ -1,11 +1,15 @@
 import logging
+import uuid
 
 from celery.exceptions import MaxRetriesExceededError, Retry
 
 from app.ai_service import AIPermanentError, AIRetryableError, ai_service
+from app.billing_service import refund_lead_credit
 from app.celery_app import celery_app
+from app.config import settings
 from app.database import SessionLocal
-from app.models import Company, LeadPitch, PitchStatus
+from app.models import Company, LeadPitch, PitchStatus, User
+from app.notification_service import send_completion_email
 from app.scraper import scrape_company_website
 
 logger = logging.getLogger(__name__)
@@ -18,9 +22,15 @@ logger = logging.getLogger(__name__)
     default_retry_delay=30,
 )
 def enrich_company_task(self, company_id: str) -> None:
+    try:
+        company_uuid = uuid.UUID(company_id)
+    except ValueError:
+        logger.error("Invalid company id %r; dropping task", company_id)
+        return
+
     db = SessionLocal()
     try:
-        company = db.get(Company, company_id)
+        company = db.get(Company, company_uuid)
         if company is None:
             logger.error("Company %s not found", company_id)
             return
@@ -91,6 +101,17 @@ def enrich_company_task(self, company_id: str) -> None:
             len(pending_pitches),
         )
 
+        # Notify AFTER the completed state is committed, and from a separate
+        # task: a slow or failing email API can never roll back or crash the
+        # enrichment that already succeeded. Broker hiccups are swallowed too.
+        try:
+            send_completion_email_task.delay(str(company.user_id), len(pending_pitches))
+        except Exception:
+            logger.exception(
+                "Could not enqueue completion email for company %s; enrichment unaffected",
+                company_id,
+            )
+
     except Retry:
         raise
     except Exception as exc:
@@ -101,7 +122,34 @@ def enrich_company_task(self, company_id: str) -> None:
         db.close()
 
 
+@celery_app.task(name="tasks.send_completion_email_task", max_retries=2, default_retry_delay=15)
+def send_completion_email_task(user_id: str, company_count: int) -> None:
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        logger.error("Cannot send completion email: invalid user id %r", user_id)
+        return
+
+    db = SessionLocal()
+    try:
+        user = db.get(User, user_uuid)
+    finally:
+        db.close()
+
+    if user is None:
+        logger.error("Cannot send completion email: user %s not found", user_id)
+        return
+
+    send_completion_email(
+        user_email=user.email,
+        company_count=company_count,
+        dashboard_url=settings.DASHBOARD_URL,
+    )
+
+
 def _mark_pitches(db, pitches: list[LeadPitch], status: PitchStatus) -> None:
     for pitch in pitches:
         pitch.status = status
+        if status == PitchStatus.FAILED:
+            refund_lead_credit(db, pitch.user_id)
     db.commit()

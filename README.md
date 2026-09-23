@@ -1,4 +1,4 @@
-# 🚀 ProspectGPT: Distributed B2B Lead Enrichment & AI Outreach Engine
+# ProspectGPT: Distributed B2B Lead Enrichment & AI Outreach Engine
 
 [![CI](https://github.com/KyleH777/Celery/actions/workflows/ci.yml/badge.svg)](https://github.com/KyleH777/Celery/actions/workflows/ci.yml)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)
@@ -14,7 +14,7 @@ The result: research that took an SDR 15 minutes per lead now runs unattended as
 
 ---
 
-## 🛠️ System Architecture
+## System Architecture
 
 Fully asynchronous, queue-backed pipeline. The API never blocks on scraping or LLM latency — it acknowledges in milliseconds and hands the heavy lifting to workers.
 
@@ -58,9 +58,9 @@ Fully asynchronous, queue-backed pipeline. The API never blocks on scraping or L
 
 ---
 
-## ⚡ Core Engineering Challenges & Solutions
+## Core Engineering Challenges & Solutions
 
-### 💰 Token & Cost Optimization
+### Token & Cost Optimization
 
 LLM spend is the dominant marginal cost in any AI SaaS — unmanaged, it silently destroys unit economics.
 
@@ -69,7 +69,7 @@ LLM spend is the dominant marginal cost in any AI SaaS — unmanaged, it silentl
 - **Hard input budgets with graceful degradation.** Scraped text is capped at 48K characters at the service boundary; on `context_length_exceeded` or output-truncation errors, the prompt shrinks in 12K-character steps down to a 4K floor before the job is declared permanently failed — no unbounded retry loops billing the API.
 - **Scrape-once semantics.** Raw text persists to `companies.raw_scraped_text`; re-pitching a known company skips the network entirely. Duplicate in-flight requests for the same domain return the existing job instead of enqueueing redundant scrape + LLM work.
 
-### 🎯 Deterministic AI via Structured Outputs
+### Deterministic AI via Structured Outputs
 
 Free-text LLM responses are a production liability: one malformed JSON blob and your parser throws at 3 AM.
 
@@ -77,7 +77,7 @@ Free-text LLM responses are a production liability: one malformed JSON blob and 
 - **Validation as a contract.** Field constraints (e.g., `pain_points` bounded to 2–3 items) are enforced by Pydantic on deserialization, so downstream code never defends against shape drift. Refusals and null parses raise typed exceptions instead of propagating `None`.
 - **Two-step agent chain over one mega-prompt.** Step 1 extracts grounded facts (value prop, audience, industry, size, pain points); Step 2 consumes those facts plus the raw text to draft the pitch. Decomposition keeps each prompt focused, makes the intermediate analysis independently persistable and auditable, and lets the pitch prompt enforce its own constraint: *reference a specific detail from the website to prove a human-grade read.*
 
-### 📈 Scalable Async Processing
+### Scalable Async Processing
 
 A synchronous API would need to hold a connection open through a 10-second scrape (with up to 3 network retries) plus two LLM round trips — under modest concurrency that exhausts the server's worker pool, and every deploy or timeout silently kills in-flight jobs.
 
@@ -88,7 +88,7 @@ A synchronous API would need to hold a connection open through a 10-second scrap
 
 ---
 
-## 💻 Tech Stack
+## Tech Stack
 
 | Layer | Technology | Role |
 |---|---|---|
@@ -99,7 +99,7 @@ A synchronous API would need to hold a connection open through a 10-second scrap
 
 ---
 
-## ⚙️ Quick Start Guide
+## Quick Start Guide
 
 Prerequisites: Docker + Docker Compose, and an OpenAI API key.
 
@@ -120,9 +120,9 @@ That single command brings up PostgreSQL (with persistent volume), Redis, the Fa
 
 | Endpoint | URL |
 |---|---|
-| 🎯 ProspectGPT Dashboard | http://localhost:8501 |
-| 📚 Interactive API Docs (Swagger) | http://localhost:8000/docs |
-| ❤️ API Health Check | http://localhost:8000/health |
+|  ProspectGPT Dashboard | http://localhost:8501 |
+|  Interactive API Docs (Swagger) | http://localhost:8000/docs |
+|  API Health Check | http://localhost:8000/health |
 
 **Try it:** open the dashboard, paste a domain like `stripe.com`, click **Analyze Company**, and watch the pipeline stream from `pending` to a fully personalized pitch.
 
@@ -188,7 +188,7 @@ External integrations (OpenAI, Stripe, Resend, Redis) are mocked at the SDK
 boundary, so the suite is deterministic, fast (~20s), and runs anywhere —
 including CI — with zero credentials.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 .
@@ -220,7 +220,7 @@ including CI — with zero credentials.
 └── .env.example
 ```
 
-## 🔌 API Reference
+##  API Reference
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
@@ -232,14 +232,14 @@ including CI — with zero credentials.
 
 Uniform JSON error envelopes throughout: `401` for missing/invalid tokens, `404` for unknown pitches, `422` for invalid domains, `429` when rate-limited (with `Retry-After`), `503` when the database is unreachable, `500` for unexpected failures — no stack traces or internal details cross the API boundary.
 
-## 🔐 Security Model
+## Security Model
 
 - **Authentication** — OAuth2 password flow issuing short-lived HS256 JWTs (PyJWT); passwords bcrypt-hashed via Passlib with per-hash salts. Login timing is equalized against user enumeration, and all credential failures return one generic 401.
 - **Multi-tenant isolation** — every `Company` and `LeadPitch` row carries a `user_id` foreign key; all queries filter by the authenticated user, and cross-tenant IDs return the same 404 as nonexistent ones. Domains are unique *per tenant*, so two customers researching the same company never share records.
 - **Rate limiting** — `slowapi` backed by the existing Redis container: atomic `INCR` + window `EXPIRE` per user key, enforced globally across all API replicas, with an in-memory fallback if Redis blips. The enrich endpoint (which fans out to scraping + LLM spend) is capped at 5 requests/minute per user.
 - **Fail-fast secrets** — the app refuses to boot without `JWT_SECRET_KEY` (generate with `openssl rand -hex 32`).
 
-## 💳 Billing & Notifications
+## Billing & Notifications
 
 - **Stripe subscriptions** — `POST /api/v1/billing/checkout` returns a hosted Checkout URL; signature-verified webhooks (`/api/v1/billing/webhook`) activate accounts, provision monthly lead credits on paid invoices, and mark accounts `past_due` on failed payments. Webhook processing is idempotent: each event ID commits atomically with the changes it caused, so Stripe redeliveries can never double-apply. Test locally with `stripe listen --forward-to localhost:8000/api/v1/billing/webhook`.
 - **Credit metering** — one credit is reserved per queued enrichment via an atomic conditional UPDATE (race-safe under concurrency) and refunded automatically if the job terminally fails. `GET /api/v1/billing/me` reports status and remaining quota.

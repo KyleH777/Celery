@@ -165,7 +165,7 @@ Requires local PostgreSQL and Redis reachable via the URLs in `.env`.
 
 ---
 
-## 🧪 Testing & Quality
+## Testing & Quality
 
 A 71-test pytest suite runs on every push via GitHub Actions, alongside ruff linting:
 
